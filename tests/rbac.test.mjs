@@ -27,6 +27,11 @@ test("domain management is restricted to tenant owners and admins", () => {
   for (const role of ["operator", "viewer"]) assert.throws(() => requirePermission(role, "manageDomains"), AuthorizationError);
 });
 
+test("volume management is restricted to tenant owners and admins", () => {
+  for (const role of ["owner", "admin"]) assert.equal(requirePermission(role, "manageVolumes"), true);
+  for (const role of ["operator", "viewer"]) assert.throws(() => requirePermission(role, "manageVolumes"), AuthorizationError);
+});
+
 test("deployment operations allow operator but not viewer", () => {
   for (const role of ["owner", "admin", "operator"]) assert.equal(requirePermission(role, "operateDeployments"), true);
   assert.throws(() => requirePermission("viewer", "operateDeployments"), AuthorizationError);

@@ -11,7 +11,7 @@ const MAX_DISK_BYTES = 1024 * 1024 * 1024 * 1024;
 
 function validateDeploymentPayload(payload) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("Deployment payload must be an object.");
-  const allowed = ["deployment_id", "image", "container_port", "resources", "health_check_path", "health_check_timeout_seconds"];
+  const allowed = ["deployment_id", "image", "container_port", "resources", "health_check_path", "health_check_timeout_seconds", "volumes"];
   if (Object.keys(payload).some((key) => !allowed.includes(key))) throw new Error("Deployment payload contains unsupported fields.");
   if (!UUID.test(payload.deployment_id || "")) throw new Error("Deployment ID is invalid.");
   if (typeof payload.image !== "string" || !IMAGE_DIGEST.test(payload.image)) throw new Error("Deployment image must be a fully qualified, immutable OCI SHA-256 digest.");
@@ -28,7 +28,29 @@ function validateDeploymentPayload(payload) {
   const healthCheckTimeout = payload.health_check_timeout_seconds == null ? 30 : payload.health_check_timeout_seconds;
   if (typeof healthCheckPath !== "string" || healthCheckPath.length < 1 || healthCheckPath.length > 256 || !/^\/[A-Za-z0-9._~!$&'()*+,;=:@%\/-]*$/.test(healthCheckPath) || healthCheckPath.startsWith("//") || healthCheckPath.split("/").includes("..")) throw new Error("Health-check path must be a safe absolute path of at most 256 characters.");
   if (!Number.isInteger(healthCheckTimeout) || healthCheckTimeout < 5 || healthCheckTimeout > 120) throw new Error("Health-check timeout must be an integer from 5 to 120 seconds.");
-  return { ...payload, health_check_path: healthCheckPath, health_check_timeout_seconds: healthCheckTimeout, container_name: "cloudexify-" + payload.deployment_id.toLowerCase() };
+  const volumes = [];
+  if (payload.volumes != null) {
+    if (!Array.isArray(payload.volumes)) throw new Error("volumes must be an array.");
+    for (const v of payload.volumes) {
+      if (!v || typeof v !== "object") throw new Error("volume entry must be an object.");
+      if (typeof v.host_path !== "string" || !v.host_path.startsWith("/var/lib/cloudexify/volumes/") || v.host_path.includes("..")) {
+        throw new Error("volume host_path must be an absolute path under /var/lib/cloudexify/volumes/.");
+      }
+      if (typeof v.mount_path !== "string" || !v.mount_path.startsWith("/") || v.mount_path.includes("..")) {
+        throw new Error("volume mount_path must be an absolute container path.");
+      }
+      const topSegment = v.mount_path.split("/")[1];
+      if (["proc", "sys", "etc", "dev", "bin", "sbin", "lib", "lib64", "root"].includes(topSegment)) {
+        throw new Error("volume mount_path cannot target system container directories.");
+      }
+      volumes.push({
+        host_path: v.host_path,
+        mount_path: v.mount_path,
+        read_only: Boolean(v.read_only)
+      });
+    }
+  }
+  return { ...payload, volumes, health_check_path: healthCheckPath, health_check_timeout_seconds: healthCheckTimeout, container_name: "cloudexify-" + payload.deployment_id.toLowerCase() };
 }
 
 export class PodmanWorkloadRuntime {
@@ -135,6 +157,10 @@ export class PodmanWorkloadRuntime {
 
     await this.verifyImage(payload.image);
     await this.command(["pull", "--quiet", payload.image], 300000);
+    const volumeArgs = (payload.volumes || []).map((v) => {
+      const flags = (v.read_only ? "ro" : "rw") + ",noexec,nosuid,nodev,z";
+      return "--volume=" + v.host_path + ":" + v.mount_path + ":" + flags;
+    });
     const args = [
       "run", "--detach",
       "--name", payload.container_name,
@@ -152,6 +178,7 @@ export class PodmanWorkloadRuntime {
       "--security-opt=no-new-privileges",
       "--user=10001:10001",
       "--tmpfs=/tmp:rw,noexec,nosuid,nodev,size=" + String(Math.floor(Math.min(64 * 1024 * 1024, payload.resources.disk_bytes) / (1024 * 1024))) + "m",
+      ...volumeArgs,
       payload.image
     ];
     try {

@@ -84,6 +84,16 @@ function fakePool(role = "viewer", { applicationDeployments = [], deploymentReco
       if (query.startsWith("SELECT * FROM app_private.accept_node_heartbeat")) return params[1] === createHash("sha256").update("node-credential-test-012345678901234567890123").digest("hex") ? { rows: [{ node_id: params[0], status: "online", last_seen_at: "2026-11-22T00:00:00.000Z" }], rowCount: 1 } : { rows: [], rowCount: 0 };
       if (query.startsWith("SELECT app_private.node_credential_is_valid")) return { rows: [{ valid: params[1] === createHash("sha256").update("node-credential-test-012345678901234567890123").digest("hex") }], rowCount: 1 };
       if (query.startsWith("SELECT app_private.reconcile_node_deployments")) return { rows: [{ reconciled_jobs: 2 }], rowCount: 1 };
+      if (query.startsWith("SELECT id FROM applications WHERE id =")) return { rows: [{ id: params[0] }], rowCount: 1 };
+      if (query.startsWith("SELECT id, tenant_id, application_id, name, mount_path, size_bytes, status, attached_node_id, attached_deployment_id, read_only, driver, created_at, updated_at FROM application_volumes WHERE tenant_id =")) return { rows: [{ id: "91000000-0000-4000-8000-000000000001", tenant_id: tenantId, application_id: appId, name: "app-data", mount_path: "/var/data", size_bytes: 1073741824, status: "detached", attached_node_id: null, attached_deployment_id: null, read_only: false, driver: "local_dir", created_at: new Date().toISOString() }], rowCount: 1 };
+      if (query.startsWith("SELECT id, tenant_id, application_id, name, mount_path, size_bytes, status, attached_node_id, attached_deployment_id, read_only, driver, created_at, updated_at FROM application_volumes WHERE id =")) return { rows: [{ id: params[0], tenant_id: tenantId, application_id: appId, name: "app-data", mount_path: "/var/data", size_bytes: 1073741824, status: "detached", attached_node_id: null, attached_deployment_id: null, read_only: false, driver: "local_dir", created_at: new Date().toISOString() }], rowCount: 1 };
+      if (query.startsWith("SELECT id, name, status, attached_deployment_id FROM application_volumes")) return { rows: [{ id: params[0], name: "app-data", status: "detached", attached_deployment_id: null }], rowCount: 1 };
+      if (query.startsWith("SELECT id, name, size_bytes FROM application_volumes")) return { rows: [{ id: params[0], name: "app-data", size_bytes: 1073741824 }], rowCount: 1 };
+      if (query.startsWith("DELETE FROM application_volumes")) return { rows: [], rowCount: 1 };
+      if (query.startsWith("INSERT INTO application_volumes")) return { rows: [{ id: "91000000-0000-4000-8000-000000000001", tenant_id: tenantId, application_id: params[1], name: params[2], mount_path: params[3], size_bytes: params[4], read_only: params[5], driver: params[6], status: "detached", created_at: new Date().toISOString() }], rowCount: 1 };
+      if (query.startsWith("SELECT id, tenant_id, volume_id, status, size_bytes, sha256_checksum, backup_location, retention_days, created_at, completed_at FROM volume_backups")) return { rows: [], rowCount: 0 };
+      if (query.startsWith("INSERT INTO volume_backups")) return { rows: [{ id: "92000000-0000-4000-8000-000000000001", tenant_id: tenantId, volume_id: params[1], status: "completed", size_bytes: params[2], retention_days: 30, created_at: new Date().toISOString() }], rowCount: 1 };
+      if (query.startsWith("SELECT id, tenant_id, actor_type, actor_id, action, resource_type, resource_id, request_id, metadata_json AS metadata, created_at FROM audit_events")) return { rows: [{ id: "93000000-0000-4000-8000-000000000001", tenant_id: tenantId, actor_type: "user", actor_id: userId, action: "application.created", resource_type: "application", resource_id: appId, metadata: {}, created_at: new Date().toISOString() }], rowCount: 1 };
       if (query.startsWith("SELECT * FROM app_private.claim_node_jobs")) return params[1] === createHash("sha256").update("node-credential-test-012345678901234567890123").digest("hex") ? { rows: [{ job_id: "60000000-0000-4000-8000-000000000001", job_type: "probe", payload: {}, attempt_id: "70000000-0000-4000-8000-000000000001", lease_token: "80000000-0000-4000-8000-000000000001", lease_expires_at: new Date(Date.now() + 60000).toISOString(), attempt_number: 1 }], rowCount: 1 } : { rows: [], rowCount: 0 };
       if (query.startsWith("SELECT * FROM app_private.acknowledge_node_job")) return params[1] === createHash("sha256").update("node-credential-test-012345678901234567890123").digest("hex") ? { rows: [{ job_id: params[2], status: params[5], attempt_id: params[3], retry_at: null }], rowCount: 1 } : { rows: [], rowCount: 0 };
       if (query.startsWith("INSERT INTO audit_events")) return { rows: [], rowCount: 1 };
@@ -891,4 +901,90 @@ test("domain challenge renewal refuses to replace an unexpired challenge", async
   });
   assert.equal(response.status, 409);
   assert.equal(api.pool.calls.some((call) => call.sql.startsWith("INSERT INTO domain_verification_challenges")), false);
+});
+
+test("owner can list and create persistent application volumes", async (t) => {
+  const api = await startApi("owner"); t.after(api.close);
+  const listRes = await fetch(api.origin + "/api/v1/tenants/" + tenantId + "/volumes", {
+    headers: { authorization: "Bearer " + makeToken() }
+  });
+  assert.equal(listRes.status, 200);
+  const listPayload = await listRes.json();
+  assert.equal(Array.isArray(listPayload.volumes), true);
+
+  const createRes = await fetch(api.origin + "/api/v1/tenants/" + tenantId + "/volumes", {
+    method: "POST",
+    headers: { authorization: "Bearer " + makeToken(), "content-type": "application/json" },
+    body: JSON.stringify({ application_id: appId, name: "db-data", mount_path: "/var/lib/postgresql/data", size_bytes: 10737418240 })
+  });
+  assert.equal(createRes.status, 201);
+  const createPayload = await createRes.json();
+  assert.equal(createPayload.volume.name, "db-data");
+  assert.equal(api.pool.calls.some((call) => call.sql.startsWith("INSERT INTO application_volumes")), true);
+  assert.equal(api.pool.calls.some((call) => call.sql.startsWith("INSERT INTO audit_events") && call.params[2] === "volume.created"), true);
+});
+
+test("viewer cannot create application volumes", async (t) => {
+  const api = await startApi("viewer"); t.after(api.close);
+  const response = await fetch(api.origin + "/api/v1/tenants/" + tenantId + "/volumes", {
+    method: "POST",
+    headers: { authorization: "Bearer " + makeToken(), "content-type": "application/json" },
+    body: JSON.stringify({ application_id: appId, name: "db-data", mount_path: "/var/lib/postgresql/data" })
+  });
+  assert.equal(response.status, 403);
+  assert.equal(api.pool.calls.some((call) => call.sql.startsWith("INSERT INTO application_volumes")), false);
+});
+
+test("volume creation validates mount path and size bounds", async (t) => {
+  const api = await startApi("owner"); t.after(api.close);
+  const invalidMount = await fetch(api.origin + "/api/v1/tenants/" + tenantId + "/volumes", {
+    method: "POST",
+    headers: { authorization: "Bearer " + makeToken(), "content-type": "application/json" },
+    body: JSON.stringify({ application_id: appId, name: "bad-mount", mount_path: "/proc/data" })
+  });
+  assert.equal(invalidMount.status, 400);
+
+  const invalidSize = await fetch(api.origin + "/api/v1/tenants/" + tenantId + "/volumes", {
+    method: "POST",
+    headers: { authorization: "Bearer " + makeToken(), "content-type": "application/json" },
+    body: JSON.stringify({ application_id: appId, name: "bad-size", mount_path: "/data", size_bytes: 100 })
+  });
+  assert.equal(invalidSize.status, 400);
+});
+
+test("owner can delete a detached volume", async (t) => {
+  const api = await startApi("owner"); t.after(api.close);
+  const volumeId = "91000000-0000-4000-8000-000000000001";
+  const deleteRes = await fetch(api.origin + "/api/v1/tenants/" + tenantId + "/volumes/" + volumeId, {
+    method: "DELETE",
+    headers: { authorization: "Bearer " + makeToken() }
+  });
+  assert.equal(deleteRes.status, 200);
+  const payload = await deleteRes.json();
+  assert.equal(payload.deleted, true);
+  assert.equal(api.pool.calls.some((call) => call.sql.startsWith("DELETE FROM application_volumes")), true);
+  assert.equal(api.pool.calls.some((call) => call.sql.startsWith("INSERT INTO audit_events") && call.params[2] === "volume.deleted"), true);
+});
+
+test("tenant member can query audit events with filtering", async (t) => {
+  const api = await startApi("viewer"); t.after(api.close);
+  const res = await fetch(api.origin + "/api/v1/tenants/" + tenantId + "/audit-events?limit=25", {
+    headers: { authorization: "Bearer " + makeToken() }
+  });
+  assert.equal(res.status, 200);
+  const payload = await res.json();
+  assert.equal(Array.isArray(payload.audit_events), true);
+  assert.equal(payload.audit_events.length, 1);
+});
+
+test("tenant member can query deployment lifecycle events", async (t) => {
+  const api = await startApi("viewer"); t.after(api.close);
+  const deploymentId = "50000000-0000-4000-8000-000000000001";
+  const res = await fetch(api.origin + "/api/v1/tenants/" + tenantId + "/deployments/" + deploymentId + "/events", {
+    headers: { authorization: "Bearer " + makeToken() }
+  });
+  assert.equal(res.status, 200);
+  const payload = await res.json();
+  assert.equal(Array.isArray(payload.events), true);
+  assert.equal(payload.events.length, 1);
 });

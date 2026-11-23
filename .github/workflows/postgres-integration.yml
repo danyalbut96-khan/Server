@@ -87,10 +87,14 @@ jobs:
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/migrations/020_node_ingress_drain_state.sql
       - name: Apply persistent application volumes migration
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/migrations/021_persistent_application_volumes.sql
+      - name: Apply ACME certificate lifecycle migration
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/migrations/022_acme_certificate_lifecycle.sql
       - name: Verify node ingress drain state
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/postgres/node-ingress-drain.integration.sql
       - name: Verify persistent application volumes
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/postgres/persistent-volumes.integration.sql
+      - name: Verify ACME certificate lifecycle
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/postgres/acme-certificates.integration.sql
       - name: Run PostgreSQL integration checks
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/postgres/rls.integration.sql
       - name: Verify runtime capability heartbeat

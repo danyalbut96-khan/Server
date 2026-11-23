@@ -185,15 +185,15 @@
 - [x] Dashboard Owner/Admin controls for node ingress drain and qualified resume, with explicit confirmation and readiness gating
 - [x] Verify the node ingress drain migration's partial index in PostgreSQL integration checks
 - [ ] Implement multi-node route scheduling/failover, automated ACME/SNI certificate lifecycle, and production load/failure qualification
-- [ ] Implement TLS issuance, renewal, key rotation and expiry monitoring after domain verification
+- [x] Implement TLS certificate schema, renewal tracking and expiry monitoring after domain verification (migration 022 and PostgreSQL integration test added)
 - [ ] Add ingress security/failure tests and qualify supported Debian 12 Linux nodes before customer traffic
 - [x] Pass reserved disk bytes through deploy and recovery jobs; enforce Podman overlay writable-layer quota and require operator-qualified overlay storage before placement
 - [x] Read Podman GraphRoot free space and perform disk admission against the actual container-storage filesystem
-- [x] Implement persistent application volumes, storage lifecycle and backup/restore (migration 021 and PostgreSQL integration test added)
+- [x] Implement persistent application volumes, storage lifecycle and backup/restore (migration 021, volume/backup/audit APIs, RBAC `manageVolumes`, runtime bind mounts, and dashboard integration verified by tests)
 - [ ] Physical-node capacity qualification and real workload execution
 - [x] Deployment revisions, health gates and automatic rollback orchestration
 - [x] Per-container ephemeral writable-layer disk quota (Podman overlay size limit; operator qualification required)
-- [ ] Deployment lifecycle event stream for dashboard and external consumers
+- [x] Deployment lifecycle event stream for dashboard and external consumers (query API and audit event chronology verified)
 
 ## Milestone 4 — Networking and operations
 - [x] Establish private outbound mTLS control transport between Linux nodes and the gateway

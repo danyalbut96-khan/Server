@@ -377,9 +377,17 @@ function domainRows(items) {
   });
 }
 
-function volumeRows(items) {
+function volumeRows(items, canManage = false) {
   return items.map((item) => {
-    return "<tr><td><strong>" + escapeHtml(item.name) + '</strong><small class="subcell">' + escapeHtml(item.id) + "</small></td><td><code>" + escapeHtml(item.mount_path) + "</code></td><td>" + formatBytes(item.size_bytes) + "</td><td>" + status(item.status) + "</td><td>" + escapeHtml(formatDate(item.created_at)) + "</td></tr>";
+    let action = escapeHtml(formatDate(item.created_at));
+    if (canManage) {
+      const deleteBtn = item.status === "detached"
+        ? '<button class="secondary-btn btn-sm" data-delete-volume="' + escapeHtml(item.id) + '">Delete</button>'
+        : '';
+      const backupBtn = '<button class="secondary-btn btn-sm" data-backup-volume="' + escapeHtml(item.id) + '">Backup</button>';
+      action = (deleteBtn ? deleteBtn + " " : "") + backupBtn;
+    }
+    return "<tr><td><strong>" + escapeHtml(item.name) + '</strong><small class="subcell">' + escapeHtml(item.id) + "</small></td><td><code>" + escapeHtml(item.mount_path) + "</code></td><td>" + formatBytes(item.size_bytes) + "</td><td>" + status(item.status) + "</td><td>" + action + "</td></tr>";
   });
 }
 
@@ -503,7 +511,7 @@ function renderPage() {
     deployments: ["Deployments", "Stop or restart a revision on its assigned node. A revision becomes healthy only after its HTTP endpoint returns 2xx.", table(["REVISION", "APPLICATION ID", "DESIRED STATE", "STATUS", "CREATED / ACTION"], deploymentRows(deployments, ["owner", "admin", "operator"].includes(currentRole)), "No deployments recorded in this workspace.")],
     jobs: ["Node jobs", "Diagnostic job queue and execution state", table(["TYPE", "NODE ID", "STATUS", "ATTEMPTS", "UPDATED"], jobRows(jobs), "No jobs recorded in this workspace.")],
     domains: ["Domains & Ingress", "Custom domain claims, DNS verification challenges and route registry status", table(["HOSTNAME", "STATUS", "GATEWAY TRANSPORT", "CREATED"], domainRows(domains), "No domain claims recorded in this workspace.")],
-    storage: ["Persistent application volumes", "Durable volumes and snapshot backup records with tenant isolation", table(["VOLUME NAME", "MOUNT PATH", "CAPACITY", "STATUS", "CREATED"], volumeRows(volumes), "No persistent volumes provisioned in this workspace.")],
+    storage: ["Persistent application volumes", "Durable volumes and snapshot backup records with tenant isolation", table(["VOLUME NAME", "MOUNT PATH", "CAPACITY", "STATUS", "ACTIONS"], volumeRows(volumes, ["owner", "admin"].includes(currentRole)), "No persistent volumes provisioned in this workspace.")],
     members: ["Workspace members", "Members with access to this tenant", table(["MEMBER", "ROLE", "STATUS", "JOINED"], memberRows(members), "No workspace members found.")],
     settings: ["Session and workspace settings", "Authentication, session continuity and service configuration", '<div class="settings-grid"><article class="settings-card"><span>AUTHENTICATION</span><h3>Supabase Auth</h3><p>Browser session persistence with automatic token refresh and stale-token recovery.</p><b class="setting-state">Automatic refresh enabled</b></article><article class="settings-card"><span>ACCESS TOKEN</span><h3>' + escapeHtml(state.session?.expires_at ? formatDate(new Date(Number(state.session.expires_at) * 1000)) : "Not available") + '</h3><p>Current access-token expiry. The browser refreshes it before expiry; this is not the overall session end time.</p></article><article class="settings-card"><span>WORKSPACE</span><h3>' + escapeHtml(state.tenants.find((tenant) => tenant.id === state.tenantId)?.name || "No workspace") + '</h3><p>Current role: ' + escapeHtml(currentRole || "Unknown") + '</p></article><article class="settings-card"><span>DATA REFRESH</span><h3>Every 3 seconds</h3><p>Single combined snapshot while this dashboard is active, with bounded retry backoff after network failures.</p></article><article class="settings-card"><span>API PROTECTION</span><h3>600 requests / minute</h3><p>Vercel edge rate limit per source IP for the authenticated control-plane API.</p></article><article class="settings-card"><span>WORKLOAD RUNTIME</span><h3>Rootless Podman qualified</h3><p>Workload isolation with Cosign verification and fail-closed ingress transport gate active.</p></article></div>']
   }[state.page] || null;
@@ -572,12 +580,49 @@ function renderPage() {
     });
   });
 
+  $("#table-content").querySelectorAll("[data-delete-volume]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const volumeId = button.dataset.deleteVolume;
+      button.disabled = true;
+      try {
+        await api("/api/v1/tenants/" + encodeURIComponent(state.tenantId) + "/volumes/" + encodeURIComponent(volumeId), {
+          method: "DELETE"
+        });
+        dashboardMessage("Volume deleted.");
+        await refreshData({ force: true });
+      } catch (error) {
+        dashboardMessage(error.message || "Unable to delete volume.", true);
+        button.disabled = false;
+      }
+    });
+  });
+
+  $("#table-content").querySelectorAll("[data-backup-volume]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const volumeId = button.dataset.backupVolume;
+      button.disabled = true;
+      try {
+        await api("/api/v1/tenants/" + encodeURIComponent(state.tenantId) + "/volumes/" + encodeURIComponent(volumeId) + "/backups", {
+          method: "POST",
+          body: JSON.stringify({ retention_days: 30 })
+        });
+        dashboardMessage("Volume backup record created.");
+        await refreshData({ force: true });
+      } catch (error) {
+        dashboardMessage(error.message || "Unable to create volume backup.", true);
+        button.disabled = false;
+      }
+    });
+  });
+
   const applicationButton = $("#create-application-button");
   if (applicationButton) applicationButton.hidden = !(state.page === "applications" && ["owner", "admin"].includes(currentRole));
   const deploymentButton = $("#create-deployment-button");
   if (deploymentButton) deploymentButton.hidden = !(state.page === "deployments" && ["owner", "admin", "operator"].includes(currentRole) && applications.length > 0);
   const memberButton = $("#create-member-button");
   if (memberButton) memberButton.hidden = !(state.page === "members" && ["owner", "admin"].includes(currentRole));
+  const volumeButton = $("#create-volume-button");
+  if (volumeButton) volumeButton.hidden = !(state.page === "storage" && ["owner", "admin"].includes(currentRole) && applications.length > 0);
   const diagnosticButton = $("#create-diagnostic-job");
   if (diagnosticButton) diagnosticButton.hidden = !(state.page === "jobs" && ["owner", "admin", "operator"].includes(currentRole) && nodes.some((node) => ["online", "degraded"].includes(node.status)));
   if (state.page === "nodes" && state.selectedNodeId) renderNodeDetails(state.selectedNodeId);
@@ -829,6 +874,38 @@ async function init() {
           body: JSON.stringify({ user_id: String(form.get("user_id") || "").trim(), role: form.get("role") })
         });
         dashboardMessage("Workspace membership created.");
+      }
+    });
+  });
+
+  $("#create-volume-button")?.addEventListener("click", () => {
+    const apps = state.data.applications;
+    if (!apps.length) {
+      dashboardMessage("Create an application before provisioning a volume.", true);
+      return;
+    }
+    showResourceDialog({
+      title: "Provision persistent volume",
+      description: "Attach durable storage with tenant isolation. Mount path must be an absolute posix path under /var, /data, /mnt, /opt, or /srv.",
+      fields: [
+        { name: "application_id", label: "Application", type: "select", required: true, options: apps.map((app, index) => ({ value: app.id, label: app.name, selected: index === 0 })) },
+        { name: "name", label: "Volume name", required: true, maxLength: 63, placeholder: "e.g. pgdata" },
+        { name: "mount_path", label: "Mount path inside container", required: true, maxLength: 255, placeholder: "/var/lib/postgresql/data" },
+        { name: "size_gb", label: "Size in GiB (1–10240)", type: "number", required: true, placeholder: "10" }
+      ],
+      submitLabel: "Create volume",
+      onSubmit: async (form) => {
+        const sizeGb = Number(form.get("size_gb")) || 1;
+        await api("/api/v1/tenants/" + encodeURIComponent(state.tenantId) + "/volumes", {
+          method: "POST",
+          body: JSON.stringify({
+            application_id: form.get("application_id"),
+            name: String(form.get("name") || "").trim(),
+            mount_path: String(form.get("mount_path") || "").trim(),
+            size_bytes: sizeGb * 1024 * 1024 * 1024
+          })
+        });
+        dashboardMessage("Persistent volume provisioned.");
       }
     });
   });

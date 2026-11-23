@@ -6,6 +6,7 @@ export const PERMISSIONS = Object.freeze({
   manageMembers: ["owner", "admin"],
   manageNodes: ["owner", "admin"],
   manageDomains: ["owner", "admin"],
+  manageVolumes: ["owner", "admin"],
   operateDeployments: ["owner", "admin", "operator"],
   manageJobs: ["owner", "admin", "operator"]
 });

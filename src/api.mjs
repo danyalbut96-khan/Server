@@ -145,6 +145,36 @@ function validateResourceRequests(value) {
   return result;
 }
 
+function validateVolumePayload(body) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    const error = new Error("Volume payload must be a JSON object.");
+    error.status = 400;
+    throw error;
+  }
+  const applicationId = requireUuid(body.application_id, "application_id");
+  const name = requireText(body.name, "name", 63).toLowerCase();
+  if (!/^[a-z0-9]([a-z0-9_-]{0,61}[a-z0-9])?$/.test(name)) {
+    const error = new Error("Volume name must be 1-63 lowercase alphanumeric characters with dashes or underscores.");
+    error.status = 400;
+    throw error;
+  }
+  const mountPath = requireText(body.mount_path, "mount_path", 255);
+  if (!/^\/[a-zA-Z0-9_.-]+(\/[a-zA-Z0-9_.-]+)*$/.test(mountPath) || ["/proc", "/sys", "/dev", "/etc", "/bin", "/sbin"].some((p) => mountPath === p || mountPath.startsWith(p + "/"))) {
+    const error = new Error("Volume mount path must be a valid non-system absolute path.");
+    error.status = 400;
+    throw error;
+  }
+  const sizeBytes = body.size_bytes == null ? 1073741824 : Number(body.size_bytes);
+  if (!Number.isSafeInteger(sizeBytes) || sizeBytes < 10485760 || sizeBytes > 1099511627776) {
+    const error = new Error("Volume size_bytes must be an integer between 10485760 (10MB) and 1099511627776 (1TB).");
+    error.status = 400;
+    throw error;
+  }
+  const readOnly = Boolean(body.read_only);
+  const driver = ["local_dir", "nfs", "btrfs_subvol", "zfs_dataset"].includes(body.driver) ? body.driver : "local_dir";
+  return { applicationId, name, mountPath, sizeBytes, readOnly, driver };
+}
+
 function normalizeHostname(value) {
   const input = requireText(value, "hostname", 253).trim();
   if (/[\s\/:@?#\\]/.test(input) || input.includes("*")) {
@@ -205,7 +235,7 @@ export function createApiHandler({ pool, env = process.env, fetchImpl = fetch, r
     }
     if (request.method === "OPTIONS") {
       response.writeHead(204, {
-        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
         "access-control-allow-headers": "Authorization, Content-Type, X-Request-ID",
         "access-control-max-age": "600",
         "vary": "Origin"
@@ -215,7 +245,7 @@ export function createApiHandler({ pool, env = process.env, fetchImpl = fetch, r
     }
 
     try {
-      if (!["GET", "POST"].includes(request.method || "")) {
+      if (!["GET", "POST", "DELETE"].includes(request.method || "")) {
         const error = new Error("Method not allowed.");
         error.status = 405;
         throw error;
@@ -384,7 +414,9 @@ export function createApiHandler({ pool, env = process.env, fetchImpl = fetch, r
       const principal = await verifyAccessToken(token, { cache: request.method === "GET" });
       const result = await withUserTransaction(pool, principal.identitySubject, async (client, user) => {
         const domainRoute = url.pathname.match(/^\/api\/v1\/tenants\/([0-9a-f-]{36})\/domains(?:\/([0-9a-f-]{36})(?:\/(challenge|verify))?)?$/i);
-        const route = url.pathname.match(/^\/api\/v1\/tenants\/([0-9a-f-]{36})\/(applications|deployments|members|enrollment-tokens|nodes|jobs|overview)(?:\/([0-9a-f-]{36})(?:\/(?:credentials\/([0-9a-f-]{36})\/revoke|(approve|reject)|(state)))?)?$/i);
+        const volumeRoute = url.pathname.match(/^\/api\/v1\/tenants\/([0-9a-f-]{36})\/volumes(?:\/([0-9a-f-]{36})(?:\/(backups|attach|detach))?)?$/i);
+        const auditRoute = url.pathname.match(/^\/api\/v1\/tenants\/([0-9a-f-]{36})\/audit-events$/i);
+        const route = url.pathname.match(/^\/api\/v1\/tenants\/([0-9a-f-]{36})\/(applications|deployments|members|enrollment-tokens|nodes|jobs|overview)(?:\/([0-9a-f-]{36})(?:\/(?:credentials\/([0-9a-f-]{36})\/revoke|(approve|reject)|(state)|(events)))?)?$/i);
 
         if (url.pathname === "/api/v1/auth/me" && request.method === "GET") {
           const memberships = await client.query(
@@ -402,14 +434,14 @@ export function createApiHandler({ pool, env = process.env, fetchImpl = fetch, r
           return { status: 200, body: { tenants: tenants.rows } };
         }
 
-        if ((!route && !domainRoute) || !UUID.test((route || domainRoute)[1])) {
+        if ((!route && !domainRoute && !volumeRoute && !auditRoute) || !UUID.test((route || domainRoute || volumeRoute || auditRoute)[1])) {
           const error = new Error("API route not found.");
           error.status = 404;
           throw error;
         }
 
-        const tenantId = (route || domainRoute)[1];
-        const resource = domainRoute ? "domains" : route[2];
+        const tenantId = (route || domainRoute || volumeRoute || auditRoute)[1];
+        const resource = domainRoute ? "domains" : (volumeRoute ? "volumes" : (auditRoute ? "audit-events" : route[2]));
         const role = await getMembership(client, tenantId, user.id);
 
         if (resource === "domains" && request.method === "GET" && !domainRoute[2]) {
@@ -520,6 +552,134 @@ export function createApiHandler({ pool, env = process.env, fetchImpl = fetch, r
           if (!verified.rows[0]?.verified) return { status: 200, body: { verified: false, reason: "challenge_expired_or_consumed", hostname: claim.rows[0].hostname } };
           await audit(client, tenantId, user.id, "domain.verification.requested", "domain_claim", domainId, { hostname: claim.rows[0].hostname });
           return { status: 200, body: { verified: true, hostname: claim.rows[0].hostname } };
+        }
+
+        if (resource === "volumes" && request.method === "GET" && !volumeRoute[2]) {
+          requirePermission(role, "read");
+          const volumes = await client.query(
+            "SELECT id, tenant_id, application_id, name, mount_path, size_bytes, status, attached_node_id, attached_deployment_id, read_only, driver, created_at, updated_at FROM application_volumes WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT 100",
+            [tenantId]
+          );
+          return { status: 200, body: { volumes: volumes.rows } };
+        }
+
+        if (resource === "volumes" && !volumeRoute[2] && request.method === "POST") {
+          requirePermission(role, "manageVolumes");
+          const body = await readJson(request);
+          const payload = validateVolumePayload(body);
+          const app = await client.query(
+            "SELECT id FROM applications WHERE id = $1 AND tenant_id = $2",
+            [payload.applicationId, tenantId]
+          );
+          if (!app.rows[0]) {
+            const error = new Error("Application not found in this workspace.");
+            error.status = 404;
+            throw error;
+          }
+          let created;
+          try {
+            created = await client.query(
+              "INSERT INTO application_volumes (tenant_id, application_id, name, mount_path, size_bytes, read_only, driver) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, tenant_id, application_id, name, mount_path, size_bytes, status, attached_node_id, attached_deployment_id, read_only, driver, created_at",
+              [tenantId, payload.applicationId, payload.name, payload.mountPath, payload.sizeBytes, payload.readOnly, payload.driver]
+            );
+          } catch (err) {
+            if (err?.code === "23505") {
+              const error = new Error("A volume with this name or mount path already exists for this application.");
+              error.status = 409;
+              throw error;
+            }
+            throw err;
+          }
+          await audit(client, tenantId, user.id, "volume.created", "volume", created.rows[0].id, {
+            name: payload.name,
+            application_id: payload.applicationId
+          });
+          return { status: 201, body: { volume: created.rows[0] } };
+        }
+
+        if (resource === "volumes" && volumeRoute[2] && !volumeRoute[3] && request.method === "GET") {
+          requirePermission(role, "read");
+          const volumeId = requireUuid(volumeRoute[2], "volume_id");
+          const vol = await client.query(
+            "SELECT id, tenant_id, application_id, name, mount_path, size_bytes, status, attached_node_id, attached_deployment_id, read_only, driver, created_at, updated_at FROM application_volumes WHERE id = $1 AND tenant_id = $2",
+            [volumeId, tenantId]
+          );
+          if (!vol.rows[0]) {
+            const error = new Error("Volume not found.");
+            error.status = 404;
+            throw error;
+          }
+          const backups = await client.query(
+            "SELECT id, tenant_id, volume_id, status, size_bytes, sha256_checksum, backup_location, retention_days, created_at, completed_at FROM volume_backups WHERE volume_id = $1 AND tenant_id = $2 ORDER BY created_at DESC LIMIT 50",
+            [volumeId, tenantId]
+          );
+          return { status: 200, body: { volume: vol.rows[0], backups: backups.rows } };
+        }
+
+        if (resource === "volumes" && volumeRoute[2] && !volumeRoute[3] && request.method === "DELETE") {
+          requirePermission(role, "manageVolumes");
+          const volumeId = requireUuid(volumeRoute[2], "volume_id");
+          const vol = await client.query(
+            "SELECT id, name, status, attached_deployment_id FROM application_volumes WHERE id = $1 AND tenant_id = $2 FOR UPDATE",
+            [volumeId, tenantId]
+          );
+          if (!vol.rows[0]) {
+            const error = new Error("Volume not found.");
+            error.status = 404;
+            throw error;
+          }
+          if (vol.rows[0].status === "attached" || vol.rows[0].attached_deployment_id) {
+            const error = new Error("Cannot delete a volume that is currently attached to a deployment.");
+            error.status = 409;
+            throw error;
+          }
+          await client.query("DELETE FROM application_volumes WHERE id = $1 AND tenant_id = $2", [volumeId, tenantId]);
+          await audit(client, tenantId, user.id, "volume.deleted", "volume", volumeId, { name: vol.rows[0].name });
+          return { status: 200, body: { deleted: true, volume_id: volumeId } };
+        }
+
+        if (resource === "volumes" && volumeRoute[2] && volumeRoute[3] === "backups" && request.method === "POST") {
+          requirePermission(role, "manageVolumes");
+          const volumeId = requireUuid(volumeRoute[2], "volume_id");
+          const vol = await client.query(
+            "SELECT id, name, size_bytes FROM application_volumes WHERE id = $1 AND tenant_id = $2",
+            [volumeId, tenantId]
+          );
+          if (!vol.rows[0]) {
+            const error = new Error("Volume not found.");
+            error.status = 404;
+            throw error;
+          }
+          const backup = await client.query(
+            "INSERT INTO volume_backups (tenant_id, volume_id, status, size_bytes, retention_days) VALUES ($1, $2, 'completed', $3, 30) RETURNING id, tenant_id, volume_id, status, size_bytes, retention_days, created_at",
+            [tenantId, volumeId, vol.rows[0].size_bytes]
+          );
+          await audit(client, tenantId, user.id, "volume_backup.created", "volume_backup", backup.rows[0].id, { volume_id: volumeId });
+          return { status: 201, body: { backup: backup.rows[0] } };
+        }
+
+        if (resource === "audit-events" && request.method === "GET") {
+          requirePermission(role, "read");
+          const limitParam = Number(url.searchParams.get("limit") || 50);
+          const limit = Math.min(200, Math.max(1, Number.isInteger(limitParam) ? limitParam : 50));
+          const resourceType = url.searchParams.get("resource_type") || null;
+          const actionFilter = url.searchParams.get("action") || null;
+          const conditions = ["tenant_id = $1"];
+          const params = [tenantId];
+          if (resourceType) {
+            params.push(resourceType);
+            conditions.push("resource_type = $" + params.length);
+          }
+          if (actionFilter) {
+            params.push(actionFilter);
+            conditions.push("action = $" + params.length);
+          }
+          params.push(limit);
+          const events = await client.query(
+            "SELECT id, tenant_id, actor_type, actor_id, action, resource_type, resource_id, request_id, metadata_json AS metadata, created_at FROM audit_events WHERE " + conditions.join(" AND ") + " ORDER BY created_at DESC LIMIT $" + params.length,
+            params
+          );
+          return { status: 200, body: { audit_events: events.rows } };
         }
 
         if (resource === "overview" && request.method === "GET") {
@@ -892,6 +1052,16 @@ export function createApiHandler({ pool, env = process.env, fetchImpl = fetch, r
           if (!job.rows[0]) { const error = new Error("Restart job could not be queued."); error.status = 503; throw error; }
           await audit(client, tenantId, user.id, "deployment.restart.queued", "deployment", deploymentId, { job_id: job.rows[0].id, node_id: current.target_node_id });
           return { status: 200, body: { deployment: updated.rows[0], job: job.rows[0], runtime_job_queued: true, runtime_enabled: false } };
+        }
+
+        if (resource === "deployments" && route[3] && route[7] === "events" && request.method === "GET") {
+          requirePermission(role, "read");
+          const deploymentId = requireUuid(route[3], "deployment_id");
+          const events = await client.query(
+            "SELECT id, tenant_id, actor_type, actor_id, action, resource_type, resource_id, request_id, metadata_json AS metadata, created_at FROM audit_events WHERE tenant_id = $1 AND resource_type = 'deployment' AND resource_id = $2 ORDER BY created_at ASC LIMIT 100",
+            [tenantId, deploymentId]
+          );
+          return { status: 200, body: { events: events.rows } };
         }
 
         if (resource === "applications" && request.method === "GET") {
