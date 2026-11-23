@@ -189,7 +189,7 @@
 - [ ] Add ingress security/failure tests and qualify supported Debian 12 Linux nodes before customer traffic
 - [x] Pass reserved disk bytes through deploy and recovery jobs; enforce Podman overlay writable-layer quota and require operator-qualified overlay storage before placement
 - [x] Read Podman GraphRoot free space and perform disk admission against the actual container-storage filesystem
-- [ ] Implement persistent application volumes, storage lifecycle and backup/restore
+- [x] Implement persistent application volumes, storage lifecycle and backup/restore (migration 021 and PostgreSQL integration test added)
 - [ ] Physical-node capacity qualification and real workload execution
 - [x] Deployment revisions, health gates and automatic rollback orchestration
 - [x] Per-container ephemeral writable-layer disk quota (Podman overlay size limit; operator qualification required)

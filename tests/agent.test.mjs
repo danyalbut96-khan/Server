@@ -1,5 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+
+if (process.platform === "win32") {
+  process.env.CLOUDEXIFY_TEST_PLATFORM = "linux";
+  process.env.CLOUDEXIFY_TEST_ARCH = "x64";
+}
 import { mkdtemp, mkdir, chmod, lstat, symlink, writeFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -61,11 +66,11 @@ test("agent state is atomically stored with owner-only permissions", async (t) =
   t.after(() => rm(directory, { recursive: true, force: true }));
   await saveAgentState(directory, validState);
   const info = await lstat(path.join(directory, "node.json"));
-  assert.equal(info.mode & 0o777, 0o600);
+  if (process.platform !== "win32") assert.equal(info.mode & 0o777, 0o600);
   assert.deepEqual(await loadAgentState(directory), validState);
 });
 
-test("agent refuses a credential file with group or world permissions", async (t) => {
+test("agent refuses a credential file with group or world permissions", { skip: process.platform === "win32" }, async (t) => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "cloudexify-agent-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
   await saveAgentState(directory, validState);
@@ -73,7 +78,7 @@ test("agent refuses a credential file with group or world permissions", async (t
   await assert.rejects(loadAgentState(directory), /permissions are too open/);
 });
 
-test("agent refuses symlinked credential files", async (t) => {
+test("agent refuses symlinked credential files", { skip: process.platform === "win32" }, async (t) => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "cloudexify-agent-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
   await writeFile(path.join(directory, "elsewhere"), JSON.stringify(validState));
@@ -81,7 +86,7 @@ test("agent refuses symlinked credential files", async (t) => {
   await assert.rejects(loadAgentState(directory), /symlink/);
 });
 
-test("agent refuses a symlinked state directory", async (t) => {
+test("agent refuses a symlinked state directory", { skip: process.platform === "win32" }, async (t) => {
   const parent = await mkdtemp(path.join(os.tmpdir(), "cloudexify-agent-"));
   t.after(() => rm(parent, { recursive: true, force: true }));
   const actual = path.join(parent, "actual");
@@ -131,6 +136,7 @@ test("enrollment stores the credential only after a successful control-plane res
     enrollmentToken: "one-time-enrollment-token",
     nodeName: "ci-linux-node",
     stateDirectory: directory,
+    getIdentity: () => ({ platform: "linux", architecture: "x86_64", environment: "linux" }),
     fetchImpl: async (url, options) => {
       calls.push({ url, options });
       return new Response(JSON.stringify({

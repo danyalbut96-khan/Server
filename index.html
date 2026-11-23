@@ -1,61 +1,236 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#101827"><meta name="description" content="Cloudexify multi-device hosting control plane">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#090d16">
+<meta name="description" content="Cloudexify multi-device hosting control plane and managed server platform">
 <title>Cloudexify Server — Control Plane</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Manrope:wght@600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
 <section id="auth-view" class="auth-screen">
   <div class="auth-card">
-    <div class="brand auth-brand"><span class="brand-mark">C</span><span><b>cloudexify</b><small>SERVER PLATFORM</small></span></div>
+    <div class="brand auth-brand">
+      <div class="brand-mark">C</div>
+      <div class="brand-text">
+        <b>cloudexify</b>
+        <small>SERVER PLATFORM</small>
+      </div>
+    </div>
     <span class="eyebrow">SECURE CONTROL PLANE</span>
     <h1>Sign in to Cloudexify</h1>
-    <p class="auth-copy">Use your Cloudexify Server account to access your infrastructure.</p>
+    <p class="auth-copy">Enter your credentials to manage nodes, applications and workload deployments.</p>
     <form id="login-form">
-      <label for="login-email">Email address</label><input id="login-email" name="email" type="email" autocomplete="username" required maxlength="254">
-      <label for="login-password">Password</label><input id="login-password" name="password" type="password" autocomplete="current-password" required minlength="6">
-      <button class="primary-btn auth-submit" type="submit" id="login-button">Sign in</button>
+      <div class="form-group">
+        <label for="login-email">Email address</label>
+        <input id="login-email" name="email" type="email" autocomplete="username" required maxlength="254" placeholder="admin@example.com">
+      </div>
+      <div class="form-group">
+        <label for="login-password">Password</label>
+        <input id="login-password" name="password" type="password" autocomplete="current-password" required minlength="6" placeholder="••••••••••••">
+      </div>
+      <button class="primary-btn auth-submit" type="submit" id="login-button">
+        <span>Sign in to control plane</span>
+      </button>
     </form>
     <p id="auth-message" class="auth-message" role="status" aria-live="polite"></p>
-    <small class="auth-footnote">Accounts are provisioned by your Cloudexify administrator.</small>
+    <small class="auth-footnote">Accounts are provisioned by your Cloudexify administrator via Supabase Auth.</small>
   </div>
 </section>
+
 <div id="app-view" class="shell" hidden>
+  <!-- Backdrop for mobile drawer -->
+  <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+
   <aside class="sidebar" id="sidebar">
-    <a class="brand" href="#overview"><span class="brand-mark">C</span><span><b>cloudexify</b><small>SERVER PLATFORM</small></span></a>
-    <div class="workspace"><span class="workspace-dot"></span><span><b id="workspace-name">Workspace</b><small>Cloudexify control plane</small></span></div>
+    <div class="sidebar-header">
+      <a class="brand" href="#overview">
+        <div class="brand-mark">C</div>
+        <div class="brand-text">
+          <b>cloudexify</b>
+          <small>SERVER PLATFORM</small>
+        </div>
+      </a>
+      <button class="icon-btn mobile-close-btn" id="mobile-sidebar-close" aria-label="Close sidebar">✕</button>
+    </div>
+
+    <div class="workspace-card">
+      <div class="workspace-indicator">
+        <span class="workspace-dot"></span>
+      </div>
+      <div class="workspace-meta">
+        <b id="workspace-name">Workspace</b>
+        <small>Cloudexify control plane</small>
+      </div>
+      <span class="workspace-badge">LIVE</span>
+    </div>
+
     <nav class="nav" aria-label="Main navigation">
-      <p class="nav-label">WORKSPACE</p>
-      <a class="nav-link active" href="#overview" data-page="overview">▦ Overview</a>
-      <a class="nav-link" href="#nodes" data-page="nodes">▤ Compute nodes</a>
-      <a class="nav-link" href="#applications" data-page="applications">▣ Applications</a>
-      <a class="nav-link" href="#deployments" data-page="deployments">⇧ Deployments</a>
-      <a class="nav-link" href="#jobs" data-page="jobs">◷ Jobs</a>
-      <a class="nav-link" href="#members" data-page="members">♙ Workspace members</a>
-      <a class="nav-link" href="#settings" data-page="settings">⚙ Settings</a>
+      <div class="nav-section">
+        <p class="nav-label">INFRASTRUCTURE</p>
+        <a class="nav-link active" href="#overview" data-page="overview">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M3 4a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm8 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V4zm-8 8a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H4a1 1 0 01-1-1v-4zm8 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"/></svg>
+          <span>Overview</span>
+        </a>
+        <a class="nav-link" href="#nodes" data-page="nodes">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M2 5a2 2 0 012-2h12a2 2 0 012 2v2a2 2 0 01-2 2H4a2 2 0 01-2-2V5zm14 1a1 1 0 100-2 1 1 0 000 2zm-3-1a1 1 0 11-2 0 1 1 0 012 0zM2 13a2 2 0 012-2h12a2 2 0 012 2v2a2 2 0 01-2 2H4a2 2 0 01-2-2v-2zm14 1a1 1 0 100-2 1 1 0 000 2zm-3-1a1 1 0 11-2 0 1 1 0 012 0z" clip-rule="evenodd"/></svg>
+          <span>Compute nodes</span>
+          <span class="nav-badge" id="nodes-count-badge">0</span>
+        </a>
+        <a class="nav-link" href="#applications" data-page="applications">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2h-2.22l.123.489.804.804A1 1 0 0113 18H7a1 1 0 01-.707-1.707l.804-.804L7.22 15H5a2 2 0 01-2-2V5zm5.771 7H5V5h10v7H8.771z" clip-rule="evenodd"/></svg>
+          <span>Applications</span>
+          <span class="nav-badge" id="apps-count-badge">0</span>
+        </a>
+        <a class="nav-link" href="#deployments" data-page="deployments">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 001.414-1.414z" clip-rule="evenodd"/></svg>
+          <span>Deployments</span>
+          <span class="nav-badge" id="deployments-count-badge">0</span>
+        </a>
+        <a class="nav-link" href="#jobs" data-page="jobs">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/></svg>
+          <span>Jobs</span>
+        </a>
+      </div>
+
+      <div class="nav-section">
+        <p class="nav-label">NETWORK & STORAGE</p>
+        <a class="nav-link" href="#domains" data-page="domains">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.083 9h11.834a8 8 0 01-11.834 0zm-.043 2h11.92a8.001 8.001 0 01-11.92 0zM10 2a8 8 0 100 16 8 8 0 000-16z" clip-rule="evenodd"/></svg>
+          <span>Domains & Ingress</span>
+        </a>
+        <a class="nav-link" href="#storage" data-page="storage">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm0 6a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1v-2zm0 6a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1v-2z" clip-rule="evenodd"/></svg>
+          <span>Storage & Volumes</span>
+        </a>
+      </div>
+
+      <div class="nav-section">
+        <p class="nav-label">ADMINISTRATION</p>
+        <a class="nav-link" href="#members" data-page="members">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/></svg>
+          <span>Workspace members</span>
+        </a>
+        <a class="nav-link" href="#settings" data-page="settings">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/></svg>
+          <span>Settings</span>
+        </a>
+      </div>
     </nav>
+
     <div class="sidebar-bottom">
-      <div class="plan-card"><span class="plan-icon">✦</span><b>Live control plane</b><p>Data is loaded from your Cloudexify database.</p><span class="plan-status"><i></i> Connected API</span></div>
-      <div class="profile"><div class="avatar" id="profile-avatar">C</div><span><b id="profile-name">Account</b><small id="profile-email">Signed in</small></span></div>
-      <button class="secondary-btn signout-btn" id="signout-button">Sign out</button>
+      <div class="plan-card">
+        <div class="plan-card-head">
+          <span class="plan-icon">✦</span>
+          <b>Live control plane</b>
+        </div>
+        <p>Data is loaded from your Cloudexify database.</p>
+        <div class="plan-status">
+          <i></i>
+          <span>Connected API</span>
+        </div>
+      </div>
+
+      <div class="profile-card">
+        <div class="avatar" id="profile-avatar">C</div>
+        <div class="profile-meta">
+          <b id="profile-name">Account</b>
+          <small id="profile-email">Signed in</small>
+        </div>
+      </div>
+      <button class="secondary-btn signout-btn" id="signout-button" type="button">Sign out</button>
     </div>
   </aside>
+
   <main class="main">
-    <header class="topbar"><button class="menu-btn" id="menu-btn" aria-label="Toggle navigation">☰</button><div class="breadcrumb">Workspace <span>/</span> <b id="breadcrumb-page">Overview</b></div><div class="top-actions"><span class="env-pill live-pill"><i></i> LIVE DATA</span></div></header>
+    <header class="topbar">
+      <div class="topbar-left">
+        <button class="menu-btn" id="menu-btn" aria-label="Toggle navigation">☰</button>
+        <div class="breadcrumb">
+          <span>Workspace</span>
+          <span class="breadcrumb-separator">/</span>
+          <b id="breadcrumb-page">Overview</b>
+        </div>
+      </div>
+
+      <div class="topbar-right">
+        <div class="top-actions">
+          <span class="env-pill live-pill"><i></i> LIVE DATA</span>
+          <button class="theme-toggle-btn" id="theme-toggle" type="button" aria-label="Toggle color theme" title="Toggle theme">
+            <span class="theme-icon-dark">🌙</span>
+            <span class="theme-icon-light">☀️</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
     <div class="content">
-      <section class="page-heading"><div><div class="eyebrow">CONTROL PLANE <span>•</span> <span id="page-eyebrow">OVERVIEW</span></div><h1 id="page-title">Infrastructure overview</h1><p id="page-subtitle">Live status from your registered infrastructure.</p></div><div class="heading-actions"><select id="tenant-select" aria-label="Select workspace"></select><button class="secondary-btn" id="refresh-button">Refresh</button></div></section>
+      <section class="page-heading">
+        <div class="page-title-group">
+          <div class="eyebrow">CONTROL PLANE <span>•</span> <span id="page-eyebrow">OVERVIEW</span></div>
+          <h1 id="page-title">Infrastructure overview</h1>
+          <p id="page-subtitle">Live status from your registered infrastructure.</p>
+        </div>
+        <div class="heading-actions">
+          <div class="tenant-select-wrap">
+            <label for="tenant-select" class="sr-only">Select workspace</label>
+            <select id="tenant-select" aria-label="Select workspace"></select>
+          </div>
+          <button class="secondary-btn icon-btn-wrap" id="refresh-button" type="button" title="Refresh data">
+            <span class="refresh-spinner">↻</span>
+            <span>Refresh</span>
+          </button>
+        </div>
+      </section>
+
       <div id="dashboard-message" class="notice" hidden></div>
+
+      <!-- Metric Grid on Overview -->
       <section id="metric-grid" class="metric-grid"></section>
+
+      <!-- Overview Extras: Health summary, recent jobs & applications -->
       <section id="overview-extras" class="overview-extras"></section>
-      <section class="panel page-panel"><div class="panel-heading"><div><h2 id="table-title">Compute nodes</h2><p id="table-subtitle">Latest records from your workspace</p></div><div class="panel-actions"><button class="primary-btn" id="create-enrollment-button" type="button" hidden>Create enrollment token</button><button class="primary-btn" id="create-application-button" type="button" hidden>Create application</button><button class="primary-btn" id="create-deployment-button" type="button" hidden>New deployment</button><button class="primary-btn" id="create-member-button" type="button" hidden>Add member</button><button class="primary-btn" id="create-diagnostic-job" type="button" hidden>Run diagnostics</button><span id="last-updated" class="muted-note">Waiting for data</span></div></div><div id="table-content" class="table-wrap"><div class="empty-state">Loading workspace data…</div></div></section>
-      <footer><span>© 2026 Cloudexify. Code Your Future.</span><span>Live control plane</span></footer>
+
+      <!-- Main Panel with Table and Actions -->
+      <section class="panel page-panel">
+        <div class="panel-heading">
+          <div class="panel-title-group">
+            <h2 id="table-title">Compute nodes</h2>
+            <p id="table-subtitle">Latest records from your workspace</p>
+          </div>
+          <div class="panel-actions">
+            <button class="primary-btn" id="create-enrollment-button" type="button" hidden>Create enrollment token</button>
+            <button class="primary-btn" id="create-application-button" type="button" hidden>Create application</button>
+            <button class="primary-btn" id="create-deployment-button" type="button" hidden>New deployment</button>
+            <button class="primary-btn" id="create-member-button" type="button" hidden>Add member</button>
+            <button class="primary-btn" id="create-diagnostic-job" type="button" hidden>Run diagnostics</button>
+            <span id="last-updated" class="muted-note">Waiting for data</span>
+          </div>
+        </div>
+        <div id="table-content" class="table-wrap">
+          <div class="empty-state">Loading workspace data…</div>
+        </div>
+      </section>
+
+      <footer class="app-footer">
+        <div class="footer-left">
+          <span>© 2026 Cloudexify. Code Your Future.</span>
+          <span class="footer-dot">•</span>
+          <span>Prototype Hosting Control Plane</span>
+        </div>
+        <div class="footer-right">
+          <span class="footer-status-pill"><i></i> Live control plane</span>
+        </div>
+      </footer>
     </div>
   </main>
 </div>
+
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <script type="module" src="/app.js"></script>
-</body></html>
+</body>
+</html>

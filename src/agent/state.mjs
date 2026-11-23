@@ -39,8 +39,10 @@ export async function saveAgentState(directory, state) {
     handle = null;
     await rename(temporary, target);
     await chmod(target, 0o600);
-    const dirHandle = await open(directory, constants.O_RDONLY);
-    try { await dirHandle.sync(); } finally { await dirHandle.close(); }
+    if (process.platform !== "win32") {
+      const dirHandle = await open(directory, constants.O_RDONLY);
+      try { await dirHandle.sync(); } finally { await dirHandle.close(); }
+    }
   } catch (error) {
     if (handle) await handle.close().catch(() => {});
     await unlink(temporary).catch(() => {});
@@ -54,7 +56,7 @@ export async function loadAgentState(directory) {
   const info = await lstat(target);
   if (info.isSymbolicLink() || !info.isFile()) throw new Error("Agent credential file must be a regular file, not a symlink.");
   if (typeof process.getuid === "function" && info.uid !== process.getuid()) throw new Error("Agent credential file must be owned by the current user.");
-  if ((info.mode & 0o077) !== 0) throw new Error("Agent credential file permissions are too open; expected 0600.");
+  if (process.platform !== "win32" && (info.mode & 0o077) !== 0) throw new Error("Agent credential file permissions are too open; expected 0600.");
   if (info.size > 4096) throw new Error("Agent credential file exceeds the allowed size.");
   const handle = await open(target, constants.O_RDONLY | (constants.O_NOFOLLOW || 0));
   try {

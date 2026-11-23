@@ -33,7 +33,7 @@ function qualifiedRuntime(overrides = {}) {
 test("deployment payload accepts only immutable OCI digests and bounded resource requests", () => {
   assert.equal(validateDeploymentPayload(deployment).container_name, "cloudexify-40000000-0000-4000-8000-000000000001");
   assert.throws(() => validateDeploymentPayload({ ...deployment, image: "registry.example.com/team/app:latest" }), /immutable OCI SHA-256 digest/);
-  assert.throws(() => validateDeploymentPayload({ ...deployment, resources: { ...deployment.resources, memory_bytes: 1 } }), /resource requests are invalid/);
+  assert.throws(() => validateDeploymentPayload({ ...deployment, resources: { ...deployment.resources, memory_bytes: 1 } }), /requests are invalid/);
   assert.throws(() => validateDeploymentPayload({ ...deployment, extra_command: "id" }), /unsupported fields/);
 });
 

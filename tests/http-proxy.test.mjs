@@ -110,7 +110,7 @@ test("ingress returns 404, 421 and 503 without opening a tunnel", async (t) => {
     pool: { async query() { return { rows: lookupRows }; } },
     routeStreams: { hasNode: () => connected, async openStream() { opened += 1; throw new Error("must not open"); } },
     signRouteGrant: () => ({ token: "unused" }),
-    certificate: { checkHost: (host) => host === "app.example.test" }
+    certificate: { checkHost: () => certificateMatches }
   });
   const server = http.createServer((req, res) => { void handler(req, res); });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));

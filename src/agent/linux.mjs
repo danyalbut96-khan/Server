@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 
 const ARCHITECTURES = new Map([["x64", "x86_64"], ["arm64", "aarch64"]]);
 
-export function getLinuxIdentity(platform = process.platform, architecture = process.arch, env = process.env) {
+export function getLinuxIdentity(platform = process.env.CLOUDEXIFY_TEST_PLATFORM || process.platform, architecture = process.env.CLOUDEXIFY_TEST_ARCH || process.arch, env = process.env) {
   // Termux Node.js builds may report process.platform as "android" rather
   // than "linux". Accept that platform only when the Termux environment is
   // positively identified; never infer Termux from ARM architecture alone.

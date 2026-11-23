@@ -54,8 +54,8 @@ async function requestJson(fetchImpl, url, { method = "GET", credential, body, t
   }
 }
 
-export async function enrollNode({ controlPlaneUrl, enrollmentToken, nodeName, stateDirectory = defaultStateDirectory(), fetchImpl = fetch }) {
-  const identity = getLinuxIdentity();
+export async function enrollNode({ controlPlaneUrl, enrollmentToken, nodeName, stateDirectory = defaultStateDirectory(), fetchImpl = fetch, getIdentity = getLinuxIdentity }) {
+  const identity = getIdentity();
   const baseUrl = validateControlPlaneUrl(controlPlaneUrl);
   if (typeof enrollmentToken !== "string" || enrollmentToken.length < 16 || enrollmentToken.length > 256) throw new Error("A valid one-time enrollment token is required.");
   if (typeof nodeName !== "string" || !nodeName.trim() || nodeName.trim().length > 100) throw new Error("Node name must contain 1–100 characters.");
